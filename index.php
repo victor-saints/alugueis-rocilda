@@ -1,14 +1,11 @@
 <?php
-/**
- * Aluguéis Rocilda Santana
- * PHP + SQLite (o banco é criado sozinho na pasta "dados")
- */
+
 date_default_timezone_set('America/Fortaleza');
-ini_set('display_errors', '1');   // mostra erros na tela (ajuda a achar problemas)
+ini_set('display_errors', '1');   
 error_reporting(E_ALL);
 session_start();
 
-// "1.200,50", "1200,5", "850" -> número
+
 function lerValor($s) {
     $s = trim(str_replace(['R$', ' '], '', (string)$s));
     if (strpos($s, ',') !== false) {
@@ -21,7 +18,7 @@ function lerValor($s) {
 }
 function brl($v) { return 'R$ ' . number_format((float)$v, 2, ',', '.'); }
 
-// ---------- Banco de dados ----------
+
 $pasta = __DIR__ . '/dados';
 if (!is_dir($pasta)) { mkdir($pasta, 0775, true); }
 file_put_contents($pasta . '/.htaccess', "Require all denied\nDeny from all\n");
@@ -39,12 +36,12 @@ $db->exec("CREATE TABLE IF NOT EXISTS inquilinos (
     valor_aluguel REAL DEFAULT 0,
     criado_em TEXT DEFAULT CURRENT_TIMESTAMP
 )");
-// Se o banco já existia sem as colunas novas, adiciona sem perder nada
+
 $existentes = array_column($db->query('PRAGMA table_info(inquilinos)')->fetchAll(PDO::FETCH_ASSOC), 'name');
 foreach (['coluna' => "TEXT DEFAULT ''", 'unidade_consumidora' => "TEXT DEFAULT ''", 'valor_aluguel' => 'REAL DEFAULT 0'] as $col => $tipo) {
     if (!in_array($col, $existentes)) { $db->exec("ALTER TABLE inquilinos ADD COLUMN $col $tipo"); }
 }
-// Um registro por inquilino e por mês: por isso "pago" volta a "não pago" sozinho todo mês
+
 $db->exec("CREATE TABLE IF NOT EXISTS pagamentos (
     inquilino_id INTEGER NOT NULL,
     mes TEXT NOT NULL,
@@ -53,7 +50,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS pagamentos (
     FOREIGN KEY (inquilino_id) REFERENCES inquilinos(id) ON DELETE CASCADE
 )");
 
-// ---------- Segurança simples (CSRF) ----------
+
 if (empty($_SESSION['token'])) { $_SESSION['token'] = bin2hex(random_bytes(16)); }
 function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -61,7 +58,7 @@ $hoje    = new DateTime('today');
 $mesAtual = $hoje->format('Y-m');
 $mesesPt = ['', 'janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 
-// ---------- Ações ----------
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals($_SESSION['token'], $_POST['token'] ?? '')) { http_response_code(400); exit('Sessão expirada. Volte e tente de novo.'); }
     $acao = $_POST['acao'] ?? '';
@@ -105,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $msg = $_SESSION['msg'] ?? '';
 unset($_SESSION['msg']);
 
-// ---------- Dados ----------
+
 $stmt = $db->prepare("SELECT i.*, p.pago_em FROM inquilinos i
     LEFT JOIN pagamentos p ON p.inquilino_id = i.id AND p.mes = ?
     ORDER BY i.dia_vencimento, CAST(i.apartamento AS INTEGER), i.apartamento");
@@ -119,11 +116,11 @@ $valorTotal = 0; $valorRecebido = 0;
 foreach ($lista as &$l) {
     $valorTotal += (float)$l['valor_aluguel'];
     if ($l['pago_em']) { $valorRecebido += (float)$l['valor_aluguel']; }
-    // se o mês tem menos dias (ex.: dia 31 em abril), vence no último dia do mês
+    
     $dia = min((int)$l['dia_vencimento'], $ultimoDia);
     $venc = new DateTime($hoje->format('Y-m-') . str_pad($dia, 2, '0', STR_PAD_LEFT));
     $l['venc'] = $venc;
-    $dif = (int)$hoje->diff($venc)->format('%r%a'); // negativo = já passou
+    $dif = (int)$hoje->diff($venc)->format('%r%a');
 
     if ($l['pago_em']) {
         $l['status'] = 'pago'; $l['texto'] = 'Pago';
